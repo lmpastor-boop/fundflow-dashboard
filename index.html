@@ -73,7 +73,6 @@
   <!-- Feature preview cards -->
   <div class="app-wrapper">
     <div id="search-results" class="search-results-section" aria-live="polite" aria-label="Search results">
-      <div id="search-filters" class="search-filters" aria-label="Search result filters"></div>
       <!-- Feature cards shown before search -->
       <div class="feature-grid">
         <div class="feature-card">
@@ -129,6 +128,7 @@
       <div class="dash-data-info" aria-live="polite">
         <div id="dash-data-year">—</div>
         <div id="dash-total-filings">—</div>
+        <div id="dash-trend-source" class="trend-source-pill">Trend source: —</div>
       </div>
     </div>
   </header>
@@ -194,6 +194,9 @@
       </button>
       <button class="tab-btn" data-tab="grant" role="tab" aria-selected="false" id="tab-btn-grant">
         🎯 Grant Impact Modeler
+      </button>
+      <button class="tab-btn" data-tab="brief" role="tab" aria-selected="false" id="tab-btn-brief">
+        📝 Funder Brief
       </button>
     </nav>
 
@@ -389,6 +392,73 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ── Tab: Funder Brief ─────────────────────────────────────────────── -->
+      <div id="tab-brief" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-brief">
+        <div class="brief-toolbar">
+          <div class="brief-toolbar-note">
+            One-page summary for funders. Export as PDF for submission materials.
+          </div>
+          <button id="btn-export-brief" type="button" class="brief-export-btn">
+            ⬇ Export PDF Brief
+          </button>
+        </div>
+
+        <article id="brief-print-area" class="brief-sheet" aria-label="Funder brief summary">
+          <header class="brief-header">
+            <div>
+              <h2 id="brief-org-name">Organization Name</h2>
+              <div id="brief-org-meta" class="brief-meta">EIN — · —</div>
+            </div>
+            <div class="brief-chip">FundFlow Simulator</div>
+          </header>
+
+          <section class="brief-section">
+            <h3>Executive Summary</h3>
+            <p id="brief-exec-summary">—</p>
+          </section>
+
+          <section class="brief-grid brief-kpis">
+            <div class="brief-card">
+              <div class="brief-label">Resilience Score</div>
+              <div class="brief-value" id="brief-score">—</div>
+            </div>
+            <div class="brief-card">
+              <div class="brief-label">Latest Revenue</div>
+              <div class="brief-value" id="brief-revenue">—</div>
+            </div>
+            <div class="brief-card">
+              <div class="brief-label">Latest Expenses</div>
+              <div class="brief-value" id="brief-expenses">—</div>
+            </div>
+            <div class="brief-card">
+              <div class="brief-label">Net Assets</div>
+              <div class="brief-value" id="brief-net-assets">—</div>
+            </div>
+          </section>
+
+          <section class="brief-grid">
+            <div class="brief-card">
+              <h3>Trend Snapshot</h3>
+              <ul id="brief-trend-points" class="brief-list"></ul>
+            </div>
+            <div class="brief-card">
+              <h3>Risk & Opportunity</h3>
+              <ul id="brief-risk-points" class="brief-list"></ul>
+            </div>
+          </section>
+
+          <section class="brief-section">
+            <h3>Recommended Funder Action</h3>
+            <p id="brief-recommendation">—</p>
+          </section>
+
+          <footer class="brief-footer">
+            <span id="brief-source">Trend source: —</span>
+            <span id="brief-generated-at">Generated: —</span>
+          </footer>
+        </article>
       </div>
 
     </div><!-- /tab-panels -->
