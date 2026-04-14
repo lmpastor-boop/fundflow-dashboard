@@ -301,3 +301,56 @@ h1, h2, h3, h4, h5, h6 {
   height: 300px;
   width: 100%;
 }
+
+/* ── Funder Brief ── */
+.print-only {
+  display: none;
+}
+
+@media print {
+  /* Hide every non-brief element */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #funder-brief,
+  #funder-brief * {
+    visibility: visible !important;
+  }
+
+  body {
+    background: #fff !important;
+    background-image: none !important;
+  }
+
+  #funder-brief {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 28px 36px !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    font-size: 10pt !important;
+    color: #000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Force light backgrounds / borders to be legible on paper */
+  #funder-brief [style*="background: #f8fafc"],
+  #funder-brief [style*="background:#f8fafc"],
+  #funder-brief [style*="background: #f0fdf4"],
+  #funder-brief [style*="background:#f0fdf4"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
