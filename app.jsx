@@ -226,14 +226,202 @@ function OrgChart({ filings }) {
   );
 }
 
+function ShockSimulator({ org }) {
+  const [shockType, setShockType] = useState('Revenue Loss');
+  const [magnitude, setMagnitude] = useState(40);
+  const [duration, setDuration] = useState(2);
+  const chartRef = useRef(null);
+  const canvasRef = useRef(null);
+
+  // Baseline extraction from latest filing
+  const baselineRev = org.latest_revenue || 0;
+  const baselineExpenses = baselineRev * (1 - (org.operating_margin || 0));
+  
+  // Starting Net Assets derived from months_of_cash
+  const monthlyExpenses = baselineExpenses / 12;
+  const startingNetAssets = (org.months_of_cash || 0) * monthlyExpenses;
+
+  // Run 5 year Simulation
+  const labels = ['Current', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'];
+  const revData = [baselineRev];
+  const expData = [baselineExpenses];
+  const netAssetData = [startingNetAssets];
+
+  let currentAssets = startingNetAssets;
+  let exhaustedYear = null;
+
+  for (let i = 1; i <= 5; i++) {
+     let yearRev = baselineRev;
+     let yearExp = baselineExpenses;
+
+     if (i <= duration) {
+        // Apply Shock
+        if (shockType === 'Revenue Loss') yearRev = baselineRev * (1 - magnitude/100);
+        else if (shockType === 'Grant Elimination') {
+            const grantDep = org.grant_dependency || 0;
+            yearRev = baselineRev - (baselineRev * grantDep * (magnitude/100));
+        }
+        else if (shockType === 'Expense Surge') yearExp = baselineExpenses * (1 + magnitude/100);
+     } else {
+        // Recovery Period (2 years)
+        const totalRecoveryYears = 2;
+        const yearsAfterShock = i - duration;
+        
+        let targetRev = baselineRev;
+        let targetExp = baselineExpenses;
+        
+        if (yearsAfterShock <= totalRecoveryYears) {
+           // Interpolate 
+           const ratio = yearsAfterShock / totalRecoveryYears;
+           if (shockType === 'Revenue Loss') {
+              const shockRev = baselineRev * (1 - magnitude/100);
+              yearRev = shockRev + ((baselineRev - shockRev) * ratio);
+           } else if (shockType === 'Grant Elimination') {
+              const grantDep = org.grant_dependency || 0;
+              const shockRev = baselineRev - (baselineRev * grantDep * (magnitude/100));
+              yearRev = shockRev + ((baselineRev - shockRev) * ratio);
+           } else if (shockType === 'Expense Surge') {
+              const shockExp = baselineExpenses * (1 + magnitude/100);
+              yearExp = shockExp - ((shockExp - baselineExpenses) * ratio);
+           }
+        }
+     }
+     
+     revData.push(yearRev);
+     expData.push(yearExp);
+     
+     const netFlow = yearRev - yearExp;
+     currentAssets += netFlow;
+     
+     if (currentAssets < 0 && exhaustedYear === null) {
+        exhaustedYear = i;
+        currentAssets = 0; // cannot go below 0 realistically, implies bankruptcy
+     }
+     netAssetData.push(currentAssets);
+  }
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (chartRef.current) chartRef.current.destroy();
+
+    // Determine max values for scaling
+    // Math.max on array requires destructuring, which is fine for small arrays
+    
+    chartRef.current = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Projected Net Assets',
+            data: netAssetData,
+            borderColor: '#00F0FF',
+            backgroundColor: 'rgba(0, 240, 255, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: 'Projected Revenue',
+            data: revData,
+            borderColor: '#4CAF50',
+            borderWidth: 2,
+            borderDash: [5,5],
+            tension: 0.3
+          },
+          {
+             label: 'Projected Expenses',
+             data: expData,
+             borderColor: '#FF3366',
+             borderWidth: 2,
+             borderDash: [5,5],
+             tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#9BA1A6' } } },
+        scales: {
+          y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#9BA1A6', callback: (val) => '$' + (val/1e6).toFixed(1) + 'M' } },
+          x: { grid: { display: false }, ticks: { color: '#9BA1A6' } }
+        }
+      }
+    });
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [shockType, magnitude, duration, org]);
+
+  const postShockCashMonths = (netAssetData[duration] / monthlyExpenses) || 0;
+  
+  return (
+    <div className="grid-2">
+       <div className="glass-panel" style={{ padding: '24px' }}>
+          <h3>Shock Parameters</h3>
+          <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+             <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Shock Type</label>
+                <select 
+                   value={shockType} 
+                   onChange={(e) => setShockType(e.target.value)}
+                   style={{ width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '1rem' }}
+                >
+                   <option>Revenue Loss</option>
+                   <option>Grant Elimination</option>
+                   <option>Expense Surge</option>
+                </select>
+             </div>
+             
+             <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Magnitude ({magnitude}%)</label>
+                <input 
+                   type="range" min="10" max="80" step="5" value={magnitude}
+                   onChange={e => setMagnitude(parseInt(e.target.value))}
+                   style={{ width: '100%', accentColor: 'var(--accent-red)' }}
+                />
+             </div>
+
+             <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Duration ({duration} Years)</label>
+                <input 
+                   type="range" min="1" max="3" step="1" value={duration}
+                   onChange={e => setDuration(parseInt(e.target.value))}
+                   style={{ width: '100%', accentColor: 'var(--accent-red)' }}
+                />
+             </div>
+             
+             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', marginTop: '16px' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Simulation Output</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 600, color: exhaustedYear ? 'var(--accent-red)' : 'var(--accent-teal)', marginTop: '8px' }}>
+                   {exhaustedYear ? `Runway Exhausted in Year ${exhaustedYear}` : 'Survives 5-Year Scenario'}
+                </div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                   Post-Shock Cash Reserve: {postShockCashMonths.toFixed(1)} months
+                </div>
+             </div>
+          </div>
+       </div>
+       
+       <div className="glass-panel" style={{ padding: '24px' }}>
+          <h3>5-Year Recovery Curve</h3>
+          <div style={{ height: '350px', marginTop: '20px' }}>
+             <canvas ref={canvasRef}></canvas>
+          </div>
+       </div>
+    </div>
+  );
+}
+
 function OrganizationView({ org, onBack }) {
+  const [activeTab, setActiveTab] = useState('overview');
   if (!org) return null;
 
   return (
     <div className="animate-fade-in">
       <button className="back-btn" onClick={onBack}>← Back to Dashboard</button>
       
-      <div className="org-header">
+      <div className="org-header" style={{ marginBottom: '16px' }}>
         <div>
           <h1 className="page-title">{org.name}</h1>
           <div className="tag-list">
@@ -248,6 +436,21 @@ function OrganizationView({ org, onBack }) {
             ML Status: {org.resilience_label || 'Unknown'}
           </span>
         </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '16px' }}>
+         <button 
+           onClick={() => setActiveTab('overview')}
+           style={{ background: activeTab === 'overview' ? 'var(--accent-teal)' : 'transparent', color: activeTab === 'overview' ? 'black' : 'var(--text-secondary)', border: `1px solid ${activeTab === 'overview' ? 'var(--accent-teal)' : 'transparent'}`, padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s' }}
+         >
+           Financial Overview
+         </button>
+         <button 
+           onClick={() => setActiveTab('simulator')}
+           style={{ background: activeTab === 'simulator' ? 'var(--accent-red)' : 'transparent', color: activeTab === 'simulator' ? 'white' : 'var(--text-secondary)', border: `1px solid ${activeTab === 'simulator' ? 'var(--accent-red)' : 'transparent'}`, padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s' }}
+         >
+           Shock Simulator
+         </button>
       </div>
 
       <div className="grid-4" style={{ marginBottom: '24px' }}>
@@ -275,36 +478,40 @@ function OrganizationView({ org, onBack }) {
         />
       </div>
 
-      <div className="grid-2">
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '16px' }}>7-Year Financial Trend</h3>
-          <OrgChart filings={org.filings} />
-        </div>
+      {activeTab === 'overview' ? (
+        <div className="grid-2">
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <h3 style={{ marginBottom: '16px' }}>7-Year Financial Trend</h3>
+            <OrgChart filings={org.filings} />
+          </div>
 
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '16px' }}>Benchmarking & Risk</h3>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Peer Benchmark Tier</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--accent-gold)' }}>{org.benchmark_tier || 'N/A'}</div>
-              <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Among peers in {org.peer_group}</div>
-            </div>
-
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Income Diversity (HHI)</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--accent-purple)' }}>{org.income_diversity || 'Unknown'}</div>
-              <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Dominant Stream: {org.dominant_stream || 'Unknown'}<br/>Grant Dependency: {formatPercent(org.grant_dependency)}</div>
-            </div>
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <h3 style={{ marginBottom: '16px' }}>Benchmarking & Risk</h3>
             
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px' }}>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Shock Recovery Class</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--accent-red)', lineHeight: '1.2' }}>{org.shock_recovery_class || 'Unknown'}</div>
-              <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Simulated ML Funding Shock</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Peer Benchmark Tier</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--accent-gold)' }}>{org.benchmark_tier || 'N/A'}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Among peers in {org.peer_group}</div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Income Diversity (HHI)</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--accent-purple)' }}>{org.income_diversity || 'Unknown'}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Dominant Stream: {org.dominant_stream || 'Unknown'}<br/>Grant Dependency: {formatPercent(org.grant_dependency)}</div>
+              </div>
+              
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Shock Recovery Class</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--accent-red)', lineHeight: '1.2' }}>{org.shock_recovery_class || 'Unknown'}</div>
+                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Simulated ML Funding Shock</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <ShockSimulator org={org} />
+      )}
     </div>
   );
 }
