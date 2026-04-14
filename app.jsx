@@ -415,6 +415,46 @@ function ShockSimulator({ org }) {
 
 function OrganizationView({ org, onBack }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [liveFilings, setLiveFilings] = useState(org ? (org.filings || []) : []);
+  const [isFetching, setIsFetching] = useState(false);
+
+  useEffect(() => {
+    if (!org) return;
+    
+    // If the dataset only contains the single current year, pull down the history live
+    if ((org.filings || []).length <= 1) {
+      setIsFetching(true);
+      const targetUrl = `https://projects.propublica.org/nonprofits/api/v2/organizations/${org.ein}.json`;
+      fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.filings_with_data) {
+                const fetchedFilings = data.filings_with_data.map(f => ({
+                    tax_prd_yr: f.tax_prd_yr,
+                    totrevenue: f.totrevenue,
+                    totfuncexpns: f.totfuncexpns
+                }));
+                
+                const existingYears = new Set((org.filings || []).map(f => f.tax_prd_yr));
+                const combined = [...(org.filings || [])];
+                
+                for (let f of fetchedFilings) {
+                   if (!existingYears.has(f.tax_prd_yr)) {
+                       combined.push(f);
+                       existingYears.add(f.tax_prd_yr);
+                   }
+                }
+                combined.sort((a,b) => a.tax_prd_yr - b.tax_prd_yr);
+                setLiveFilings(combined);
+            }
+        })
+        .catch(err => console.error("ProPublica fetch failed", err))
+        .finally(() => setIsFetching(false));
+    } else {
+        setLiveFilings(org.filings);
+    }
+  }, [org]);
+
   if (!org) return null;
 
   return (
@@ -481,8 +521,11 @@ function OrganizationView({ org, onBack }) {
       {activeTab === 'overview' ? (
         <div className="grid-2">
           <div className="glass-panel" style={{ padding: '24px' }}>
-            <h3 style={{ marginBottom: '16px' }}>7-Year Financial Trend</h3>
-            <OrgChart filings={org.filings} />
+            <h3 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
+               7-Year Financial Trend
+               {isFetching && <span style={{ fontSize: '0.8rem', color: 'var(--accent-teal)', marginLeft: '12px', fontWeight: 'normal', animation: 'pulse 2s infinite' }}>Fetching API history...</span>}
+            </h3>
+            <OrgChart filings={liveFilings} />
           </div>
 
           <div className="glass-panel" style={{ padding: '24px' }}>
